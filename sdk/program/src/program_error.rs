@@ -63,6 +63,8 @@ pub enum ProgramError {
     InvalidAccountOwner,
     #[error("Program arithmetic overflowed")]
     ArithmeticOverflow,
+    #[error("Lock poisoned")]
+    LockPoisoned,
 }
 
 pub trait PrintProgramError {
@@ -113,6 +115,7 @@ impl PrintProgramError for ProgramError {
             }
             Self::InvalidAccountOwner => msg!("Error: InvalidAccountOwner"),
             Self::ArithmeticOverflow => msg!("Error: ArithmeticOverflow"),
+            Self::LockPoisoned => msg!("Error: LockPoisoned"),
         }
     }
 }
@@ -149,6 +152,7 @@ pub const MAX_INSTRUCTION_TRACE_LENGTH_EXCEEDED: u64 = to_builtin!(21);
 pub const BUILTIN_PROGRAMS_MUST_CONSUME_COMPUTE_UNITS: u64 = to_builtin!(22);
 pub const INVALID_ACCOUNT_OWNER: u64 = to_builtin!(23);
 pub const ARITHMETIC_OVERFLOW: u64 = to_builtin!(24);
+pub const LOCK_POISONED: u64 = to_builtin!(25);
 // Warning: Any new program errors added here must also be:
 // - Added to the below conversions
 // - Added as an equivalent to InstructionError
@@ -187,6 +191,7 @@ impl From<ProgramError> for u64 {
             }
             ProgramError::InvalidAccountOwner => INVALID_ACCOUNT_OWNER,
             ProgramError::ArithmeticOverflow => ARITHMETIC_OVERFLOW,
+            ProgramError::LockPoisoned => LOCK_POISONED,
             ProgramError::Custom(error) => {
                 if error == 0 {
                     CUSTOM_ZERO
@@ -323,6 +328,7 @@ impl From<PubkeyError> for ProgramError {
             PubkeyError::MaxSeedLengthExceeded => Self::MaxSeedLengthExceeded,
             PubkeyError::InvalidSeeds => Self::InvalidSeeds,
             PubkeyError::IllegalOwner => Self::IllegalOwner,
+            PubkeyError::LockPoisoned => Self::LockPoisoned,
         }
     }
 }
