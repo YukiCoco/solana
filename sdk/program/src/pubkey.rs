@@ -14,6 +14,12 @@ use {
     thiserror::Error,
 };
 
+use std::sync::RwLock;
+use std::collections::HashMap;
+lazy_static::lazy_static! {
+    static ref PDA_CACHE: RwLock<HashMap<(Vec<u8>, Pubkey), Option<(Pubkey, u8)>>> = RwLock::new(HashMap::new());
+}
+
 /// Number of bytes in a pubkey
 pub const PUBKEY_BYTES: usize = 32;
 /// maximum length of derived `Pubkey` seed
@@ -500,20 +506,39 @@ impl Pubkey {
         // not supported
         #[cfg(not(target_os = "solana"))]
         {
-            let mut bump_seed = [std::u8::MAX];
+        let key = (seeds.iter().flat_map(|s| s.to_vec()).collect(), *program_id);
+    
+        // 双重检查锁定优化
+        let read_guard = PDA_CACHE.read().unwrap_or_else(|e| e.into_inner());
+        if let Some(cached) = read_guard.get(&key) {
+            return cached.clone();
+        }
+        
+        // 获取写锁
+        let mut write_guard = PDA_CACHE.write().unwrap_or_else(|e| e.into_inner());
+        
+        // 再次检查防止竞态条件
+        if let Some(cached) = write_guard.get(&key) {
+            return cached.clone();
+        }
+        
+        // 执行原有计算逻辑
+        let mut bump_seed = [std::u8::MAX];
+        let result = (|| {
             for _ in 0..std::u8::MAX {
-                {
-                    let mut seeds_with_bump = seeds.to_vec();
-                    seeds_with_bump.push(&bump_seed);
-                    match Self::create_program_address(&seeds_with_bump, program_id) {
-                        Ok(address) => return Some((address, bump_seed[0])),
-                        Err(PubkeyError::InvalidSeeds) => (),
-                        _ => break,
-                    }
+                let mut seeds_with_bump = seeds.to_vec();
+                seeds_with_bump.push(&bump_seed);
+                match Self::create_program_address(&seeds_with_bump, program_id) {
+                    Ok(address) => return Some((address, bump_seed[0])),
+                    Err(PubkeyError::InvalidSeeds) => bump_seed[0] -= 1,
+                    _ => break,
                 }
-                bump_seed[0] -= 1;
             }
             None
+        })();
+        
+        write_guard.insert(key, result.clone());
+        result
         }
         // Call via a system call to perform the calculation
         #[cfg(target_os = "solana")]
